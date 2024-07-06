@@ -1,0 +1,28 @@
+INSERT INTO tb_room_type
+	(name, job)
+VALUES
+	("Vault door", "security"),
+	("Living room", "unemployed"),
+	("Power generator", "electrician"),
+	("Diner", "chef"),
+	("Water treatment", "plumber"),
+	("Storage room", "stockist"),
+	("Medbay", "scientist"),
+	("Science lab", "scientist"),
+	("Overseer's office", "explorer"),
+	("Radio studio", "broadcaster"),
+	("Weapon workshop", "gun maker"),
+	("Weight room", "unemployed"),
+	("Athletics room", "unemployed"),
+	("Armory", "unemployed"),
+	("Classroom", "unemployed"),
+	("Outfit workshop", "clothing manufacturer"),
+	("Fitness room", "unemployed"),
+	("Lounge", "unemployed"),
+	("Theme workshop", "theme maker"),
+	("Game room", "unemployed"),
+	("Barbershop", "-"),
+	("Nuclear reactor", "electrician"),
+	("Garden", "chef"),
+	("Water purification", "plumber"),
+	("Nuka-Cola bottler", "nuka cola producer");

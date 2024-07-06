@@ -1,0 +1,283 @@
+CREATE DATABASE IF NOT EXISTS db_vault_101
+COLLATE utf8mb4_general_ci
+CHARSET utf8mb4;
+
+USE db_vault_101;
+
+CREATE TABLE IF NOT EXISTS tb_incident_type (
+    id_incident_type INTEGER PRIMARY KEY AUTO_INCREMENT,
+    description VARCHAR(15) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tb_room_type (
+    id_room_type INTEGER PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(50) NOT NULL,
+    job VARCHAR(25) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tb_decease_type (
+    id_decease_type CHAR(1) PRIMARY KEY,
+    description VARCHAR(10) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tb_room (
+    id_room INTEGER PRIMARY KEY AUTO_INCREMENT,
+    size INTEGER NOT NULL,
+    floor INTEGER NOT NULL,
+    id_room_type INTEGER NOT NULL,
+CONSTRAINT fk_id_room_type_tb_room
+	FOREIGN KEY (id_room_type)
+	REFERENCES tb_room_type(id_room_type)
+);
+
+CREATE TABLE IF NOT EXISTS tb_incident (
+    id_incident INTEGER PRIMARY KEY AUTO_INCREMENT,
+    date DATE NOT NULL,
+    id_incident_type INTEGER NOT NULL,
+    id_room INTEGER NOT NULL,
+CONSTRAINT fk_id_incident_type_tb_incident
+	FOREIGN KEY (id_incident_type)
+	REFERENCES tb_incident_type(id_incident_type),
+CONSTRAINT fk_id_room_tb_incident
+	FOREIGN KEY (id_room)
+	REFERENCES tb_room(id_room)
+);
+
+CREATE TABLE IF NOT EXISTS tb_decease (
+    id_decease INTEGER PRIMARY KEY AUTO_INCREMENT,
+    date DATE NOT NULL,
+    id_decease_type CHAR(1) NOT NULL,
+    id_incident_type INTEGER NOT NULL,
+CONSTRAINT fk_id_decease_type_tb_decease
+	FOREIGN KEY (id_decease_type)
+	REFERENCES tb_decease_type(id_decease_type),
+CONSTRAINT fk_id_incident_type_tb_decease
+	FOREIGN KEY (id_incident_type)
+	REFERENCES tb_incident_type(id_incident_type)
+);
+
+CREATE TABLE IF NOT EXISTS tb_kinship (
+    id_kinship INTEGER PRIMARY KEY AUTO_INCREMENT,
+    id_mother INTEGER NOT NULL,
+    id_father INTEGER NOT NULL,
+    UNIQUE (id_mother, id_father)
+);
+
+CREATE TABLE IF NOT EXISTS tb_special (
+    id_special INTEGER PRIMARY KEY AUTO_INCREMENT,
+    strength INTEGER,
+    perception INTEGER,
+    endurance INTEGER,
+    charisma INTEGER,
+    intelligence INTEGER,
+    agility INTEGER,
+    luck INTEGER,
+    category VARCHAR(10) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tb_storage (
+    id_storage INTEGER PRIMARY KEY AUTO_INCREMENT,
+    category VARCHAR(10) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tb_quest (
+    id_quest INTEGER PRIMARY KEY AUTO_INCREMENT,
+    description VARCHAR(25) NOT NULL,
+    date_begin DATE NOT NULL,
+    date_end DATE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tb_scrap (
+    id_scrap INTEGER PRIMARY KEY AUTO_INCREMENT,
+    id_product INTEGER NOT NULL,
+    scrap_quantity INTEGER NOT NULL,
+    date DATE NOT NULL,
+CONSTRAINT fk_id_product_tb_scrap
+	FOREIGN KEY (id_product)
+    REFERENCES tb_storage(id_storage)
+);
+
+CREATE TABLE IF NOT EXISTS tb_outfit (
+    id_outfit INTEGER PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(50) NOT NULL,
+    quantity INTEGER NOT NULL,
+    id_special INTEGER UNIQUE NOT NULL,
+    id_storage INTEGER UNIQUE NOT NULL,
+CONSTRAINT fk_id_special_tb_outfit
+	FOREIGN KEY (id_special)
+    REFERENCES tb_special(id_special),
+CONSTRAINT fk_id_storage_tb_outfit
+	FOREIGN KEY (id_storage)
+    REFERENCES tb_storage(id_storage)
+);
+
+CREATE TABLE IF NOT EXISTS tb_weapon (
+    id_weapon INTEGER PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(50) NOT NULL,
+    damage VARCHAR(7) NOT NULL,
+    quantity INTEGER NOT NULL,
+    id_storage INTEGER UNIQUE NOT NULL,
+CONSTRAINT fk_id_storage_tb_weapon
+	FOREIGN KEY (id_storage)
+    REFERENCES tb_storage(id_storage)
+);
+
+CREATE TABLE IF NOT EXISTS tb_pet (
+    id_pet INTEGER PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(50) NOT NULL,
+    description VARCHAR(50) NOT NULL,
+    quantity INTEGER NOT NULL,
+    id_storage INTEGER UNIQUE NOT NULL,
+CONSTRAINT fk_id_storage_tb_pet
+	FOREIGN KEY (id_storage)
+    REFERENCES tb_storage(id_storage)
+);
+
+CREATE TABLE IF NOT EXISTS tb_junk (
+    id_junk INTEGER PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(50) NOT NULL,
+    quantity INTEGER NOT NULL,
+    id_storage INTEGER UNIQUE NOT NULL,
+CONSTRAINT fk_id_storage_tb_junk
+	FOREIGN KEY (id_storage)
+    REFERENCES tb_storage(id_storage)
+);
+
+CREATE TABLE IF NOT EXISTS tb_sale (
+    id_sale INTEGER PRIMARY KEY AUTO_INCREMENT,
+    id_product INTEGER,
+    quantity INTEGER,
+    profit INTEGER,
+    date DATE,
+CONSTRAINT fk_id_product_tb_sale
+	FOREIGN KEY (id_product)
+    REFERENCES tb_storage(id_storage)
+);
+
+CREATE TABLE IF NOT EXISTS tb_dweller (
+    id_dweller INTEGER PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(25) NOT NULL,
+    gender CHAR(1) NOT NULL,
+    level INTEGER NOT NULL,
+    status BOOLEAN DEFAULT(0),
+    id_special INTEGER UNIQUE NOT NULL,
+    id_outfit INTEGER,
+    id_weapon INTEGER,
+    id_pet INTEGER,
+    id_kinship INTEGER,
+    id_decease INTEGER,
+    id_room INTEGER,
+CONSTRAINT fk_id_special_tb_dweller
+	FOREIGN KEY (id_special)
+    REFERENCES tb_special (id_special),
+CONSTRAINT fk_id_outfit_tb_dweller
+	FOREIGN KEY (id_outfit)
+    REFERENCES tb_outfit (id_outfit),
+CONSTRAINT fk_id_weapon_tb_dweller
+	FOREIGN KEY (id_weapon)
+    REFERENCES tb_weapon (id_weapon),
+CONSTRAINT fk_id_pet_tb_dweller
+	FOREIGN KEY (id_pet)
+    REFERENCES tb_pet (id_pet),
+CONSTRAINT fk_id_kinship_tb_dweller
+	FOREIGN KEY (id_kinship)
+    REFERENCES tb_kinship (id_kinship),
+CONSTRAINT fk_id_decease_tb_dweller
+	FOREIGN KEY (id_decease)
+    REFERENCES tb_decease (id_decease),
+CONSTRAINT fk_id_room_tb_dweller
+	FOREIGN KEY (id_room)
+    REFERENCES tb_room (id_room)
+);
+
+CREATE TABLE IF NOT EXISTS tb_exploration (
+    id_exploration INTEGER PRIMARY KEY AUTO_INCREMENT,
+    duration INTEGER NOT NULL,
+    date DATE NOT NULL,
+    id_dweller INTEGER NOT NULL,
+CONSTRAINT fk_id_dweller_tb_exploration
+	FOREIGN KEY (id_dweller)
+    REFERENCES tb_dweller(id_dweller)
+);
+
+CREATE TABLE IF NOT EXISTS tb_diary (
+    id_diary INTEGER PRIMARY KEY AUTO_INCREMENT,
+    date DATE NOT NULL,
+    dweller_count INTEGER DEFAULT(0),
+    decease_count INTEGER DEFAULT(0),
+    money INTEGER DEFAULT(0),
+    room_count INTEGER DEFAULT(0),
+    exploration_count INTEGER DEFAULT(0),
+    quest_count INTEGER DEFAULT(0),
+    incident_count INTEGER DEFAULT(0),
+    outfit_count INTEGER DEFAULT(0),
+    weapon_count INTEGER DEFAULT(0),
+    pet_count INTEGER DEFAULT(0),
+    junk_count INTEGER DEFAULT(0),
+    sale_count INTEGER DEFAULT(0),
+    scrap_count INTEGER DEFAULT(0),
+    energy INTEGER DEFAULT(0),
+    water INTEGER DEFAULT(0),
+    food INTEGER DEFAULT(0)
+);
+
+CREATE TABLE IF NOT EXISTS tb_storage_quest (
+    id_quest INTEGER NOT NULL,
+    id_storage INTEGER NOT NULL,
+    quantity INTEGER NOT NULL,
+    PRIMARY KEY (id_storage, id_quest),
+CONSTRAINT fk_id_storage_tb_storage_quest
+	FOREIGN KEY (id_storage)
+    REFERENCES tb_storage (id_storage),
+CONSTRAINT fk_id_quest_tb_storage_quest
+	FOREIGN KEY (id_quest)
+    REFERENCES tb_quest (id_quest)
+);
+
+CREATE TABLE IF NOT EXISTS tb_storage_exploration (
+    id_exploration INTEGER NOT NULL,
+    id_storage INTEGER NOT NULL,
+    quantity INTEGER NOT NULL,
+    PRIMARY KEY (id_storage, id_exploration),
+CONSTRAINT fk_id_storage_tb_storage_exploration
+	FOREIGN KEY (id_storage)
+    REFERENCES tb_storage (id_storage),
+CONSTRAINT fk_id_exploration_tb_storage_exploration
+	FOREIGN KEY (id_exploration)
+    REFERENCES tb_exploration (id_exploration)
+);
+
+CREATE TABLE IF NOT EXISTS tb_dweller_quest (
+    id_dweller INTEGER NOT NULL,
+    id_quest INTEGER NOT NULL,
+    PRIMARY KEY (id_dweller, id_quest),
+CONSTRAINT fk_id_dweller_tb_dweller_quest
+	FOREIGN KEY (id_dweller)
+    REFERENCES tb_dweller (id_dweller),
+CONSTRAINT fk_id_quest_tb_dweller_quest
+	FOREIGN KEY (id_quest)
+    REFERENCES tb_quest (id_quest)
+);
+
+CREATE TABLE IF NOT EXISTS tb_storage_scrap (
+    id_scrap INTEGER NOT NULL,
+    id_junk INTEGER NOT NULL,
+    junk_quantity INTEGER NOT NULL,
+    PRIMARY KEY (id_scrap, id_junk),
+CONSTRAINT fk_id_scrap_tb_storage_scrap
+	FOREIGN KEY (id_scrap)
+    REFERENCES tb_scrap (id_scrap),
+CONSTRAINT fk_id_junk_tb_storage_scrap
+	FOREIGN KEY (id_junk)
+    REFERENCES tb_storage (id_storage)
+);
+
+ALTER TABLE tb_kinship
+ADD CONSTRAINT fk_id_mother_tb_kidship
+FOREIGN KEY (id_mother)
+REFERENCES tb_dweller (id_dweller);
+
+ALTER TABLE tb_kinship
+ADD CONSTRAINT fk_id_father_tb_kidship
+FOREIGN KEY (id_father)
+REFERENCES tb_dweller (id_dweller);

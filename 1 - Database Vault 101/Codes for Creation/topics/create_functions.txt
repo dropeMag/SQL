@@ -1,0 +1,323 @@
+DELIMITER //
+CREATE FUNCTION fn_verify_special(in_str INTEGER, in_per INTEGER, in_end INTEGER, in_cha INTEGER, in_int INTEGER, in_agi INTEGER, in_luc INTEGER, in_category VARCHAR(10))
+RETURNS BOOL
+DETERMINISTIC
+BEGIN
+	CASE
+		WHEN in_str < 0 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Strengh can not be negative.';
+		WHEN in_per < 0 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Perception can not be negative.';
+		WHEN in_end < 0 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Endurance can not be negative.';
+		WHEN in_cha < 0 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Charisma can not be negative.';
+		WHEN in_int < 0 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Intelligence can not be negative.';
+		WHEN in_agi < 0 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Agility can not be negative.';
+		WHEN in_luc < 0 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Luck can not be negative.';
+
+		WHEN in_str > 10 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Strengh can not be more than 10.';
+		WHEN in_per > 10 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Perception can not be more than 10.';
+		WHEN in_end > 10 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Endurance can not be more than 10.';
+		WHEN in_cha > 10 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Charisma can not be more than 10.';
+		WHEN in_int > 10 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Intelligence can not be more than 10.';
+		WHEN in_agi > 10 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Agility can not be more than 10.';
+		WHEN in_luc > 10 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Luck can not be more than 10.';
+        WHEN (LOWER(in_category) NOT IN ("outfit", "dweller")) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Category is invalid.';
+        
+        ELSE
+            RETURN TRUE;  
+	END CASE;
+END//
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE FUNCTION fn_calculate_outfit(ct_outfit INTEGER, accept_zero BOOL)
+RETURNS INTEGER
+READS SQL DATA
+BEGIN
+    SET @count_outfit_storage = (SELECT quantity FROM tb_outfit WHERE id_outfit = ct_outfit);
+    SET @count_outfit_dweller = (SELECT COUNT(*) FROM tb_dweller WHERE id_outfit = ct_outfit);
+    
+    CASE
+		WHEN (ct_outfit IS NULL) THEN
+			RETURN 0;
+		WHEN (@count_outfit_storage IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Outfit does not exists.';
+		WHEN (@count_outfit_storage = @count_outfit_dweller) AND (NOT accept_zero) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Out of stock for this outfit.';
+		WHEN (@count_outfit_storage < @count_outfit_dweller) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Too much outift for dweller!! Fix it!!';
+		ELSE
+			RETURN (@count_outfit_storage - @count_outfit_dweller);
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE FUNCTION fn_calculate_weapon(ct_weapon INTEGER, accept_zero BOOL)
+RETURNS INTEGER
+READS SQL DATA
+BEGIN
+    SET @count_weapon_storage = (SELECT quantity FROM tb_weapon WHERE id_weapon = ct_weapon);
+    SET @count_weapon_dweller = (SELECT COUNT(*) FROM tb_dweller WHERE id_weapon = ct_weapon);
+    
+    CASE
+		WHEN (ct_weapon IS NULL) THEN
+			RETURN 0;
+		WHEN (@count_weapon_storage IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Weapon does not exists.';
+		WHEN (@count_weapon_storage = @count_weapon_dweller) AND (NOT accept_zero) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Out of stock for this weapon.';
+		WHEN (@count_weapon_storage < @count_weapon_dweller) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Too much weapon for dweller!! Fix it!!';
+		ELSE
+			RETURN (@count_weapon_storage - @count_weapon_dweller);
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE FUNCTION fn_calculate_pet(ct_pet INTEGER, accept_zero BOOL)
+RETURNS INTEGER
+READS SQL DATA
+BEGIN
+    SET @count_pet_storage = (SELECT quantity FROM tb_pet WHERE id_pet = ct_pet);
+    SET @count_pet_dweller = (SELECT COUNT(*) FROM tb_dweller WHERE id_pet = ct_pet);
+    
+    CASE
+		WHEN (ct_pet IS NULL) THEN
+			RETURN 0;
+		WHEN (@count_pet_storage IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Pet does not exists.';
+		WHEN (@count_pet_storage = @count_pet_dweller) AND (NOT accept_zero) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Out of stock for this pet.';
+		WHEN (@count_pet_storage < @count_pet_dweller) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Too much pet for dweller!! Fix it!!';
+		ELSE
+			RETURN (@count_pet_storage - @count_pet_dweller);
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE FUNCTION fn_calculate_junk(ct_junk INTEGER, accept_zero BOOL)
+RETURNS INTEGER
+READS SQL DATA
+BEGIN
+    SET @count_junk_storage = (SELECT quantity FROM tb_junk WHERE id_junk = ct_junk);
+    
+    CASE
+		WHEN (ct_junk IS NULL) THEN
+			RETURN 0;
+		WHEN (@count_junk_storage IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Junk does not exists.';
+		WHEN (@count_junk_storage = 0) AND (NOT accept_zero) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Out of stock for this junk.';
+		ELSE
+			RETURN (@count_junk_storage);
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE FUNCTION fn_verify_storage(in_product VARCHAR(50), return_type INTEGER, accept_zero BOOL)
+RETURNS VARCHAR(255)
+READS SQL DATA
+BEGIN
+	CASE
+		WHEN ((SELECT id_storage FROM tb_outfit WHERE LOWER(name) = LOWER(in_product)) IS NOT NULL) THEN
+			SET @verify_id_storage = (SELECT id_storage FROM tb_outfit WHERE LOWER(name) = LOWER(in_product));
+            SET @tb_product_category = 'outfit';
+			SET @verify_qnt_storage = fn_calculate_outfit((SELECT id_outfit FROM tb_outfit WHERE LOWER(name) = LOWER(in_product)), accept_zero);
+            
+        WHEN ((SELECT id_storage FROM tb_weapon WHERE LOWER(name) = LOWER(in_product)) IS NOT NULL) THEN
+			SET @verify_id_storage = (SELECT id_storage FROM tb_weapon WHERE LOWER(name) = LOWER(in_product));
+            SET @tb_product_category = 'weapon';
+			SET @verify_qnt_storage = fn_calculate_weapon((SELECT id_weapon FROM tb_weapon WHERE LOWER(name) = LOWER(in_product)), accept_zero);
+        
+        WHEN ((SELECT id_storage FROM tb_pet WHERE LOWER(name) = LOWER(in_product)) IS NOT NULL) THEN
+			SET @verify_id_storage = (SELECT id_storage FROM tb_pet WHERE LOWER(name) = LOWER(in_product));
+            SET @tb_product_category = 'pet';
+			SET @verify_qnt_storage = fn_calculate_pet((SELECT id_pet FROM tb_pet WHERE LOWER(name) = LOWER(in_product)), accept_zero);
+
+        WHEN ((SELECT id_storage FROM tb_junk WHERE LOWER(name) = LOWER(in_product)) IS NOT NULL) THEN
+			SET @verify_id_storage = (SELECT id_storage FROM tb_junk WHERE LOWER(name) = LOWER(in_product));
+            SET @tb_product_category = 'junk';
+			SET @verify_qnt_storage = fn_calculate_junk((SELECT id_junk FROM tb_junk WHERE LOWER(name) = LOWER(in_product)), accept_zero);
+        
+        ELSE
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Product not found.';
+    END CASE;
+    
+    CASE
+		WHEN (return_type = 1) THEN
+			RETURN @verify_id_storage;
+		
+		WHEN (return_type = 2) THEN
+			RETURN @tb_product_category;
+		
+        WHEN (return_type = 3) THEN
+			RETURN @verify_qnt_storage;
+		
+        ELSE
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Return type is invalid.';
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE FUNCTION fn_string_filter(in_string VARCHAR(255))
+RETURNS VARCHAR(255)
+DETERMINISTIC
+BEGIN
+	SET in_string = REPLACE(in_string, '  ', ' '),
+		in_string = REPLACE(in_string, '´', ''),
+		in_string = REPLACE(in_string, '`', ''),
+		in_string = REPLACE(in_string, '~', ''),
+		in_string = REPLACE(in_string, '^', ''),
+		in_string = REPLACE(in_string, '¨', ''),
+        
+		in_string = REPLACE(in_string, '!', ''),
+		in_string = REPLACE(in_string, '?', ''),
+		in_string = REPLACE(in_string, '@', ''),
+		in_string = REPLACE(in_string, '#', ''),
+		in_string = REPLACE(in_string, '$', ''),
+		in_string = REPLACE(in_string, '%', ''),
+		in_string = REPLACE(in_string, '&', ''),
+		in_string = REPLACE(in_string, '*', ''),
+		in_string = REPLACE(in_string, '(', ''),
+		in_string = REPLACE(in_string, ')', ''),
+		in_string = REPLACE(in_string, '+', ''),
+		in_string = REPLACE(in_string, '=', ''),
+		in_string = REPLACE(in_string, '_', ''),
+		in_string = REPLACE(in_string, '<', ''),
+		in_string = REPLACE(in_string, '>', '');
+	
+    RETURN TRIM(in_string);
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE FUNCTION fn_string_length(in_string VARCHAR(255))
+RETURNS VARCHAR(255)
+DETERMINISTIC
+BEGIN
+	SET in_string = REPLACE(in_string, 'á', 'a'),
+		in_string = REPLACE(in_string, 'à', 'a'),
+		in_string = REPLACE(in_string, 'ã', 'a'),
+		in_string = REPLACE(in_string, 'â', 'a'),
+		in_string = REPLACE(in_string, 'ä', 'a'),
+		in_string = REPLACE(in_string, 'Á', 'A'),
+		in_string = REPLACE(in_string, 'À', 'A'),
+		in_string = REPLACE(in_string, 'Ã', 'A'),
+		in_string = REPLACE(in_string, 'Â', 'A'),
+		in_string = REPLACE(in_string, 'Ä', 'A'),
+		 
+		in_string = REPLACE(in_string, 'é', 'e'),
+		in_string = REPLACE(in_string, 'è', 'e'),
+		in_string = REPLACE(in_string, 'ê', 'e'),
+		in_string = REPLACE(in_string, 'É', 'E'),
+		in_string = REPLACE(in_string, 'È', 'E'),
+		in_string = REPLACE(in_string, 'Ê', 'E'),
+		 
+		in_string = REPLACE(in_string, 'í', 'i'),
+		in_string = REPLACE(in_string, 'ì', 'i'),
+		in_string = REPLACE(in_string, 'Í', 'I'),
+		in_string = REPLACE(in_string, 'Ì', 'I'),
+		 
+		in_string = REPLACE(in_string, 'ó', 'o'),
+		in_string = REPLACE(in_string, 'ò', 'o'),
+		in_string = REPLACE(in_string, 'õ', 'o'),
+		in_string = REPLACE(in_string, 'ô', 'o'),
+		in_string = REPLACE(in_string, 'ö', 'o'),
+		in_string = REPLACE(in_string, 'Ó', 'O'),
+		in_string = REPLACE(in_string, 'Ò', 'O'),
+		in_string = REPLACE(in_string, 'Õ', 'O'),
+		in_string = REPLACE(in_string, 'Ô', 'O'),
+		in_string = REPLACE(in_string, 'Ö', 'O'),
+		
+		in_string = REPLACE(in_string, 'ú', 'u'),
+		in_string = REPLACE(in_string, 'ù', 'u'),
+		in_string = REPLACE(in_string, 'ü', 'u'),
+		in_string = REPLACE(in_string, 'Ú', 'U'),
+		in_string = REPLACE(in_string, 'Ù', 'U'),
+		in_string = REPLACE(in_string, 'Ü', 'U');
+	
+    RETURN LENGTH(fn_string_filter(in_string));
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE FUNCTION fn_count_floor_size(in_floor INTEGER)
+RETURNS INTEGER
+DETERMINISTIC
+BEGIN
+	SET @count_floor_size = (SELECT SUM(size) FROM tb_room WHERE floor = in_floor);
+    
+    IF (in_floor = 1) THEN
+		RETURN (@count_floor_size + 1);
+    ELSE
+		RETURN @count_floor_size;
+    END IF;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE FUNCTION fn_insert_kinship(in_id_mom INTEGER, in_id_dad INTEGER)
+RETURNS INTEGER
+READS SQL DATA
+BEGIN
+	SET @insert_id_kinship = (SELECT id_kinship FROM tb_kinship WHERE id_mother = in_id_mom AND id_father = in_id_dad);
+    
+	CASE
+		WHEN ((SELECT gender FROM tb_dweller WHERE id_dweller = in_id_mom) IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Mother id does not exists.';
+		WHEN ((SELECT gender FROM tb_dweller WHERE id_dweller = in_id_mom) != 'f') THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Mother id is not from a Female.';
+
+        WHEN ((SELECT gender FROM tb_dweller WHERE id_dweller = in_id_dad) IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Father id does not exists.';
+        WHEN ((SELECT gender FROM tb_dweller WHERE id_dweller = in_id_dad) != 'm') THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Father id is not from a Male.';
+
+		WHEN (@insert_id_kinship IS NOT NULL) THEN
+			RETURN @insert_id_kinship;
+            
+		ELSE
+			INSERT INTO tb_kinship
+            VALUES (DEFAULT, in_id_mom, in_id_dad);
+            
+            RETURN LAST_INSERT_ID();
+    END CASE;
+END //
+DELIMITER ;

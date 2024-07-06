@@ -1,0 +1,5 @@
+INSERT INTO tb_decease_type
+VALUES
+	("v","vault"),
+	("w","westland"),
+	("q","quest");

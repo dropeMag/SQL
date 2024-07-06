@@ -1,0 +1,799 @@
+DELIMITER //
+CREATE PROCEDURE sp_insert_room(in_size INTEGER, in_floor INTEGER, in_room_type INTEGER)
+BEGIN
+	CASE
+		WHEN ((SELECT id_room_type FROM tb_room_type WHERE id_room_type = in_room_type) IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Room type does not exists.';
+		WHEN (in_size NOT IN (1, 2, 3)) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid room size.';
+		WHEN (in_floor NOT BETWEEN 1 AND 25) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid floor.';
+		WHEN ((fn_count_floor_size(in_floor) + in_size) > 8) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid size for this floor.';
+		ELSE
+			INSERT INTO tb_room
+				(size, floor, id_room_type)
+			VALUES
+				(in_size, in_floor, in_room_type);
+	END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_update_room(up_room INTEGER, up_size INTEGER)
+BEGIN
+	SET @update_room_id = (SELECT id_room FROM tb_room WHERE id_room = up_room);
+	SET @update_room_size = (SELECT size FROM tb_room WHERE id_room = up_room);
+	SET @update_room_floor = (SELECT floor FROM tb_room WHERE id_room = up_room);
+
+	IF (up_size IS NULL) THEN SET up_size = @update_room_size; END IF;
+
+	CASE
+		WHEN (@update_room_id IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Room does not exists.';
+		WHEN (up_size NOT IN (1, 2, 3)) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid room size.';
+		WHEN (up_size < @update_room_size) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'New size can not be smaller than before.';
+		WHEN ((fn_count_floor_size(@update_room_floor) + up_size) > 8) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid size for this floor.';
+		ELSE
+			UPDATE tb_room
+            SET size = up_size
+            WHERE id_room = @update_room_id;
+	END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_incident(in_date DATE, in_incident_type INTEGER, in_room INTEGER)
+BEGIN
+	IF ((SELECT id_incident_type FROM tb_incident_type WHERE id_incident_type = in_incident_type) IS NULL) THEN
+		SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Incident type does not exists.';
+	ELSEIF ((SELECT id_room FROM tb_room WHERE id_room = in_room) IS NULL) THEN
+		SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Room does not exists.';
+	ELSE
+		INSERT INTO tb_incident
+			(date, id_incident_type, id_room)
+		VALUES
+			(in_date, in_incident_type, in_room);
+	END IF;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_special(in_str INTEGER, in_per INTEGER, in_end INTEGER, in_cha INTEGER, in_int INTEGER, in_agi INTEGER, in_luc INTEGER, in_category VARCHAR(10))
+BEGIN
+	IF (SELECT fn_verify_special(in_str, in_per, in_end, in_cha, in_int, in_agi, in_luc, in_category)) THEN
+		IF in_str = 0 THEN SET in_str = NULL; END IF;
+		IF in_per = 0 THEN SET in_per = NULL; END IF;
+		IF in_end = 0 THEN SET in_end = NULL; END IF;
+		IF in_cha = 0 THEN SET in_cha = NULL; END IF;
+		IF in_int = 0 THEN SET in_int = NULL; END IF;
+		IF in_agi = 0 THEN SET in_agi = NULL; END IF;
+		IF in_luc = 0 THEN SET in_luc = NULL; END IF;
+    
+		INSERT INTO tb_special
+		VALUES (DEFAULT, in_str, in_per, in_end, in_cha, in_int, in_agi, in_luc, LOWER(in_category));
+	ELSE
+		SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SPECIAL is invalid.';
+    END IF;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_storage(in_category VARCHAR(10))
+BEGIN
+	IF (LOWER(in_category) NOT IN ('outfit', 'weapon', 'pet', 'junk')) THEN
+		SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Category is invalid.';
+    ELSE
+		INSERT INTO tb_storage
+		VALUES (DEFAULT, LOWER(in_category));
+    END IF;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_outfit(in_name VARCHAR(50), in_qnt INTEGER, in_str INTEGER, in_per INTEGER, in_end INTEGER, in_cha INTEGER, in_int INTEGER, in_agi INTEGER, in_luc INTEGER)
+BEGIN
+	CASE
+		WHEN (in_qnt < 0) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Quantity can not be negative.';
+
+		WHEN (fn_string_filter(in_name) IN (SELECT name FROM tb_outfit)) THEN
+			SET @id_outfit = (SELECT id_outfit FROM tb_outfit WHERE name = in_name);
+			SET @qnt_outfit = (SELECT quantity FROM tb_outfit WHERE name = in_name);
+            
+            UPDATE tb_outfit
+            SET quantity = @qnt_outfit + in_qnt
+            WHERE id_outfit = @id_outfit;
+
+		ELSE
+			CALL sp_insert_special(in_str, in_per, in_end, in_cha, in_int, in_agi, in_luc, 'outfit');
+            SET @last_insert_special = LAST_INSERT_ID();
+            
+			CALL sp_insert_storage('outfit');
+            SET @last_insert_storage = LAST_INSERT_ID();
+
+            INSERT INTO tb_outfit
+            VALUES (default, LOWER(fn_string_filter(in_name)), in_qnt, @last_insert_special, @last_insert_storage);
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_weapon(in_name VARCHAR(50), in_damage VARCHAR(7), in_qnt INTEGER)
+BEGIN
+	CASE
+		WHEN in_qnt < 0 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Quantity can not be negative.';
+		
+        WHEN (fn_string_filter(in_name) IN (SELECT name FROM tb_weapon)) THEN
+			SET @id_weapon = (SELECT id_weapon FROM tb_weapon WHERE name = in_name);
+			SET @qnt_weapon = (SELECT quantity FROM tb_weapon WHERE name = in_name);
+            
+            UPDATE tb_weapon
+            SET quantity = @qnt_weapon + in_qnt
+            WHERE id_weapon = @id_weapon;
+            
+		ELSE
+			CALL sp_insert_storage('weapon');
+            SET @last_insert_storage = LAST_INSERT_ID();
+
+            INSERT INTO tb_weapon
+            VALUES (default, LOWER(fn_string_filter(in_name)), in_damage, in_qnt, @last_insert_storage);
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_pet(in_name VARCHAR(50), in_description VARCHAR(50), in_qnt INTEGER)
+BEGIN
+	CASE
+		WHEN in_qnt < 0 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Quantity can not be negative.';
+		
+        WHEN (fn_string_filter(in_name) IN (SELECT name FROM tb_pet)) THEN
+			SET @id_pet = (SELECT id_pet FROM tb_pet WHERE name = in_name);
+			SET @qnt_pet = (SELECT quantity FROM tb_pet WHERE name = in_name);
+            
+            UPDATE tb_pet
+            SET quantity = @qnt_pet + in_qnt
+            WHERE id_pet = @id_pet;
+            
+		ELSE
+			CALL sp_insert_storage('pet');
+            SET @last_insert_storage = LAST_INSERT_ID();
+
+            INSERT INTO tb_pet
+            VALUES (default, LOWER(fn_string_filter(in_name)), in_description, in_qnt, @last_insert_storage);
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_junk(in_name VARCHAR(50), in_qnt INTEGER)
+BEGIN
+	CASE
+		WHEN in_qnt < 0 THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Quantity can not be negative.';
+		
+        WHEN (fn_string_filter(in_name) IN (SELECT name FROM tb_junk)) THEN
+			SET @id_junk = (SELECT id_junk FROM tb_junk WHERE name = in_name);
+			SET @qnt_junk = (SELECT quantity FROM tb_junk WHERE name = in_name);
+
+            UPDATE tb_junk
+            SET quantity = @qnt_junk + in_qnt
+            WHERE id_junk = @id_junk;
+            
+		ELSE
+			CALL sp_insert_storage('junk');
+            SET @last_insert_storage = LAST_INSERT_ID();
+
+            INSERT INTO tb_junk
+            VALUES (default, LOWER(fn_string_filter(in_name)), in_qnt, @last_insert_storage);
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_decease(in_decease_type CHAR(1), in_incident_type INTEGER)
+BEGIN
+	CASE
+		WHEN ((SELECT id_decease_type FROM tb_decease_type WHERE id_decease_type = in_decease_type) IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Decease type is invalid.';
+		WHEN ((SELECT id_incident_type FROM tb_incident_type WHERE id_incident_type = in_incident_type) IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Incident type is invalid.';
+		ELSE
+			INSERT INTO tb_decease
+            VALUES (DEFAULT, NOW(), in_decease_type, in_incident_type);
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_dweller(in_name VARCHAR(25), in_gender CHAR(1), in_level INTEGER, in_room INTEGER, in_str INTEGER, in_per INTEGER, in_end INTEGER, in_cha INTEGER, in_int INTEGER, in_agi INTEGER, in_luc INTEGER)
+BEGIN
+	CASE
+        WHEN ((SELECT name FROM tb_dweller WHERE LOWER(name) = LOWER(in_name)) IS NOT NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Dweller alredy exists.';
+        WHEN (fn_string_length(fn_string_filter(in_name)) < 7) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Name too short.';
+
+		WHEN (LOWER(in_gender) NOT IN ('f', 'm')) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Gender is invalid.';
+
+		WHEN (in_level NOT BETWEEN 1 AND 50) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Level is invalid.';
+		
+        WHEN ((SELECT id_room FROM tb_room WHERE id_room = in_room) IS NULL) AND (in_room IS NOT NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Room does not exists.';
+            
+        ELSE
+			CALL sp_insert_special(in_str, in_per, in_end, in_cha, in_int, in_agi, in_luc, 'dweller');
+            SET @last_insert_special = LAST_INSERT_ID();
+
+			IF (in_room IS NULL) THEN SET in_room = 0; END IF;
+
+			INSERT INTO tb_dweller
+				(name, gender, level, status, id_special, id_room)
+			VALUES
+				(LOWER(fn_string_filter(in_name)), in_gender, in_level, 0, @last_insert_special, in_room);
+	END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_baby(in_name VARCHAR(25), in_gender CHAR(1), in_id_mom INTEGER, in_id_dad INTEGER, in_str INTEGER, in_per INTEGER, in_end INTEGER, in_cha INTEGER, in_int INTEGER, in_agi INTEGER, in_luc INTEGER)
+BEGIN
+	CASE
+        WHEN ((SELECT name FROM tb_dweller WHERE LOWER(name) = LOWER(in_name)) IS NOT NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Dweller alredy exists.';
+        WHEN (fn_string_length(fn_string_filter(in_name)) < 7) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Name too short.';
+
+		WHEN (LOWER(in_gender) NOT IN ('f', 'm')) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Gender is invalid.';
+            
+        ELSE
+			CALL sp_insert_special(in_str, in_per, in_end, in_cha, in_int, in_agi, in_luc, 'dweller');
+            SET @last_insert_special = LAST_INSERT_ID();
+            
+            SET @last_insert_kinship = fn_insert_kinship(in_id_mom, in_id_dad);
+
+			INSERT INTO tb_dweller
+				(name, gender, level, status, id_special, id_kinship)
+			VALUES
+				(LOWER(fn_string_filter(in_name)), in_gender, 0, 0, @last_insert_special, @last_insert_kinship);
+	END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_update_dweller_bonus(in_dweller VARCHAR(25), in_outfit INTEGER, in_weapon INTEGER, in_pet INTEGER)
+BEGIN
+	SET @update_id_dweller = (SELECT id_dweller FROM tb_dweller WHERE id_dweller LIKE in_dweller OR LOWER(name) = LOWER(in_dweller));
+	
+    IF (@update_id_dweller IS NULL) THEN
+		SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Dweller does not exists.';
+	ELSEIF (SELECT status FROM tb_dweller WHERE id_dweller = @update_id_dweller) THEN
+		SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Dweller is dead. You can not give them a bonus.';
+	END IF;
+    
+    IF (in_outfit IS NULL) THEN 
+		SET in_outfit = (SELECT id_outfit FROM tb_dweller WHERE id_dweller = @update_id_dweller); 
+	ELSEIF (in_outfit = 0) THEN 
+		SET in_outfit = NULL; 
+	ELSEIF (fn_calculate_outfit(in_outfit, 0) <= 0) THEN
+		SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'An error occourred at fn_calculate_outfit.';
+    END IF;
+    
+	IF (in_weapon IS NULL) THEN 
+		SET in_weapon = (SELECT id_weapon FROM tb_dweller WHERE id_dweller = @update_id_dweller); 
+	ELSEIF (in_weapon = 0) THEN 
+		SET in_weapon = NULL; 
+	ELSEIF (fn_calculate_weapon(in_weapon, 0) <= 0) THEN
+		SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'An error occourred at fn_calculate_weapon.';
+    END IF;
+    
+	IF (in_pet IS NULL) THEN 
+		SET in_pet = (SELECT id_pet FROM tb_dweller WHERE id_dweller = @update_id_dweller); 
+	ELSEIF (in_pet = 0) THEN 
+		SET in_pet = NULL; 
+	ELSEIF (fn_calculate_pet(in_pet, 0) <= 0) THEN
+		SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'An error occourred at fn_calculate_pet.';
+    END IF;
+    
+	UPDATE tb_dweller
+	SET id_outfit = in_outfit,
+		id_weapon = in_weapon,
+		id_pet = in_pet
+	WHERE id_dweller = @update_id_dweller;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_update_dweller_special(in_dweller VARCHAR(25), in_str INTEGER, in_per INTEGER, in_end INTEGER, in_cha INTEGER, in_int INTEGER, in_agi INTEGER, in_luc INTEGER)
+BEGIN
+	SET @update_id_special = (SELECT id_special FROM tb_dweller WHERE id_dweller LIKE in_dweller OR LOWER(name) = LOWER(in_dweller));
+    
+    CASE
+		WHEN (@update_id_special IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Dweller does not exists.';
+		
+        WHEN (SELECT status FROM tb_dweller WHERE id_special = @update_id_special) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Dweller is dead. You can not change their special.';
+        
+		WHEN NOT (SELECT fn_verify_special(in_str, in_per, in_end, in_cha, in_int, in_agi, in_luc, 'dweller')) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SPECIAL is invalid.';
+		
+        ELSE        
+			IF in_str = 0 THEN SET in_str = NULL; END IF;
+			IF in_per = 0 THEN SET in_per = NULL; END IF;
+			IF in_end = 0 THEN SET in_end = NULL; END IF;
+			IF in_cha = 0 THEN SET in_cha = NULL; END IF;
+			IF in_int = 0 THEN SET in_int = NULL; END IF;
+			IF in_agi = 0 THEN SET in_agi = NULL; END IF;
+			IF in_luc = 0 THEN SET in_luc = NULL; END IF;
+
+			UPDATE tb_special
+			SET strength = in_str,
+				perception = in_per,
+				endurance = in_end,
+				charisma = in_cha,
+				intelligence = in_int,
+				agility = in_agi,
+				luck = in_luc
+			WHERE id_special = @update_id_special;
+	END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_dweller_decease(in_dweller VARCHAR(25), in_decease_type CHAR(1), in_incident_type INTEGER, in_save_product BOOL)
+BEGIN
+	SET @insert_id_dweller = (SELECT id_dweller FROM tb_dweller WHERE id_dweller LIKE in_dweller OR LOWER(name) = LOWER(in_dweller));
+	SET @insert_id_outfit = (SELECT id_outfit FROM tb_dweller WHERE id_dweller = @insert_id_dweller);
+	SET @insert_id_weapon = (SELECT id_weapon FROM tb_dweller WHERE id_dweller = @insert_id_dweller);
+	SET @insert_id_pet = (SELECT id_pet FROM tb_dweller WHERE id_dweller = @insert_id_dweller);
+
+	CASE
+		WHEN (@insert_id_dweller IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Dweller does not exists.';
+
+		WHEN (SELECT status FROM tb_dweller WHERE id_dweller = @insert_id_dweller) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Dweller is alredy dead.';
+
+        ELSE
+			CALL sp_insert_decease(in_decease_type, in_incident_type);
+			SET @last_insert_decease = LAST_INSERT_ID();
+
+            UPDATE tb_dweller
+            SET status = 1,
+				id_outfit = NULL,
+				id_weapon = NULL,
+				id_pet = NULL,
+				id_decease = @last_insert_decease,
+				id_room = NULL
+			WHERE id_dweller = @insert_id_dweller;
+	END CASE;
+    
+    IF NOT (in_save_product) THEN
+		IF (@insert_id_outfit IS NOT NULL) THEN
+			SET @update_qnt_outfit = (SELECT quantity FROM tb_outfit WHERE id_outfit = @insert_id_outfit);
+            
+			UPDATE tb_outfit
+			SET quantity = (@update_qnt_outfit - 1)
+			WHERE id_outfit = @insert_id_outfit;
+        END IF;
+        
+		IF (@insert_id_weapon IS NOT NULL) THEN 
+			SET @update_qnt_weapon = (SELECT quantity FROM tb_weapon WHERE id_weapon = @insert_id_weapon);
+            
+			UPDATE tb_weapon
+			SET quantity = (@update_qnt_weapon - 1)
+			WHERE id_weapon = @insert_id_weapon;
+        END IF;
+		
+        IF (@insert_id_pet IS NOT NULL) THEN 
+			SET @update_qnt_pet = (SELECT quantity FROM tb_pet WHERE id_pet = @insert_id_pet);
+            
+			UPDATE tb_pet
+			SET quantity = (@update_qnt_pet - 1)
+			WHERE id_pet = @insert_id_pet;
+        END IF;
+    END IF;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_update_dweller_status(up_dweller VARCHAR(25), up_level INTEGER, up_room INTEGER)
+BEGIN
+	SET @update_id_dweller = (SELECT id_dweller FROM tb_dweller WHERE id_dweller LIKE up_dweller OR LOWER(name) = LOWER(up_dweller));
+	SET @update_level_dweller = (SELECT level FROM tb_dweller WHERE id_dweller = @update_id_dweller);
+    
+    IF (up_level IS NULL) THEN SET up_level = @update_level_dweller; END IF;
+    IF (up_room IS NULL) THEN SET up_room = (SELECT id_room FROM tb_dweller WHERE id_dweller = @update_id_dweller); END IF;
+
+	CASE
+		WHEN (@update_id_dweller IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Dweller does not exists.';
+            
+		WHEN (SELECT status FROM tb_dweller WHERE id_dweller = @update_id_dweller) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Dweller is dead. You can not change their status.';
+
+		WHEN (up_level NOT BETWEEN 1 AND 50) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Level is invalid.';
+
+		WHEN (up_level < @update_level_dweller) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'New level can not be smaller than before.';
+            
+		WHEN ((SELECT id_room FROM tb_room WHERE id_room = up_room) IS NULL) AND (up_room IS NOT NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Room does not exists.';
+
+		ELSE
+			UPDATE tb_dweller
+            SET level = up_level,
+				id_room = up_room
+			WHERE id_dweller = @update_id_dweller;
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_exploration(in_dweller VARCHAR(50), in_duration INTEGER, in_date DATE)
+BEGIN
+	SET @insert_id_dweller = (SELECT id_dweller FROM tb_dweller WHERE id_dweller LIKE in_dweller OR LOWER(name) = LOWER(in_dweller));
+
+	CASE
+		WHEN (@insert_id_dweller IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Dweller does not exists.';
+
+		WHEN (SELECT status FROM tb_dweller WHERE id_dweller = @insert_id_dweller) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Dweller is dead. They can not go into an exploration.';
+
+		WHEN (in_duration < 0) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Duration can not be negative.';
+
+		WHEN (in_date > DATE(NOW())) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid date.';
+
+		ELSE
+			INSERT INTO tb_exploration
+            VALUES (DEFAULT, in_duration, in_date, @insert_id_dweller);
+	END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_quest(in_description VARCHAR(25), in_date_begin DATE, in_dweller_1 INTEGER, in_dweller_2 INTEGER, in_dweller_3 INTEGER)
+BEGIN
+	SET @insert_id_dweller_1 = (SELECT id_dweller FROM tb_dweller WHERE id_dweller LIKE in_dweller_1 OR LOWER(name) = LOWER(in_dweller_1));
+	SET @insert_id_dweller_2 = (SELECT id_dweller FROM tb_dweller WHERE id_dweller LIKE in_dweller_2 OR LOWER(name) = LOWER(in_dweller_2));
+	SET @insert_id_dweller_3 = (SELECT id_dweller FROM tb_dweller WHERE id_dweller LIKE in_dweller_3 OR LOWER(name) = LOWER(in_dweller_3));
+
+	CASE
+		WHEN (@insert_id_dweller_1 IS NOT NULL) AND (@insert_id_dweller_1 = @insert_id_dweller_2) OR
+			 (@insert_id_dweller_2 IS NOT NULL) AND (@insert_id_dweller_2 = @insert_id_dweller_3) OR
+			 (@insert_id_dweller_3 IS NOT NULL) AND (@insert_id_dweller_3 = @insert_id_dweller_1) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Dwellers must be different from each other.';        
+		
+        WHEN (@insert_id_dweller_1 IS NULL) AND (in_dweller_1 IS NOT NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'First dweller does not exists.';
+        WHEN (@insert_id_dweller_2 IS NULL) AND (in_dweller_2 IS NOT NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Second dweller does not exists.';
+        WHEN (@insert_id_dweller_3 IS NULL) AND (in_dweller_3 IS NOT NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Third dweller does not exists.';
+		
+		WHEN (SELECT status FROM tb_dweller WHERE id_dweller = @insert_id_dweller_1) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'First dweller is dead. They can not go to a quest.';
+		WHEN (SELECT status FROM tb_dweller WHERE id_dweller = @insert_id_dweller_2) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Second dweller is dead. They can not go to a quest.';
+		WHEN (SELECT status FROM tb_dweller WHERE id_dweller = @insert_id_dweller_3) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Third dweller is dead. They can not go to a quest.';
+        
+        WHEN (in_dweller_1 IS NULL) AND (in_dweller_2 IS NULL) AND (in_dweller_3 IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'At least one dweller must be on this quest.';
+		
+        WHEN (in_date_begin > NOW()) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Begin date is invalid.';
+		
+        ELSE
+			INSERT INTO tb_quest
+			VALUES (DEFAULT, in_description, in_date_begin, DATE(NOW()));
+            
+            SET @last_insert_quest = LAST_INSERT_ID();
+            
+            IF (in_dweller_1 IS NOT NULL) THEN
+				INSERT INTO tb_dweller_quest
+				VALUES (@insert_id_dweller_1, @last_insert_quest);
+            END IF;
+            
+            IF (in_dweller_2 IS NOT NULL) THEN
+				INSERT INTO tb_dweller_quest
+				VALUES (@insert_id_dweller_2, @last_insert_quest);
+            END IF;
+
+            IF (in_dweller_3 IS NOT NULL) THEN
+				INSERT INTO tb_dweller_quest
+				VALUES (@insert_id_dweller_3, @last_insert_quest);
+            END IF;
+	END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_subtract_product(in_product_category VARCHAR(10), in_id_storage INTEGER, in_qnt_storage INTEGER, in_quantity INTEGER)
+BEGIN
+	CASE
+		WHEN (in_product_category = 'outfit') THEN
+			UPDATE tb_outfit
+			SET quantity = (in_qnt_storage - in_quantity)
+			WHERE id_storage = in_id_storage;
+			
+		WHEN (in_product_category = 'weapon') THEN
+			UPDATE tb_weapon
+			SET quantity = (in_qnt_storage - in_quantity)
+			WHERE id_storage = in_id_storage;
+			
+		WHEN (in_product_category = 'pet') THEN
+			UPDATE tb_pet
+			SET quantity = (in_qnt_storage - in_quantity)
+			WHERE id_storage = in_id_storage;
+			
+		WHEN (in_product_category = 'junk') THEN
+			UPDATE tb_junk
+			SET quantity = (in_qnt_storage - in_quantity)
+			WHERE id_storage = in_id_storage;
+            
+		ELSE
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Something went wrong with this procedure or with fn_verify_storage.';
+	END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_add_product(in_product_category VARCHAR(10), in_id_storage INTEGER, in_qnt_storage INTEGER, in_quantity INTEGER)
+BEGIN
+	CASE
+		WHEN (in_product_category = 'outfit') THEN
+			UPDATE tb_outfit
+			SET quantity = (in_qnt_storage + in_quantity)
+			WHERE id_storage = in_id_storage;
+			
+		WHEN (in_product_category = 'weapon') THEN
+			UPDATE tb_weapon
+			SET quantity = (in_qnt_storage + in_quantity)
+			WHERE id_storage = in_id_storage;
+			
+		WHEN (in_product_category = 'pet') THEN
+			UPDATE tb_pet
+			SET quantity = (in_qnt_storage + in_quantity)
+			WHERE id_storage = in_id_storage;
+			
+		WHEN (in_product_category = 'junk') THEN
+			UPDATE tb_junk
+			SET quantity = (in_qnt_storage + in_quantity)
+			WHERE id_storage = in_id_storage;
+            
+		ELSE
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Something went wrong with this procedure or with fn_verify_storage.';
+	END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_sale(in_product VARCHAR(50), in_quantity INTEGER, in_profit INTEGER, in_date DATE)
+BEGIN
+	SET @insert_id_storage = fn_verify_storage(in_product, 1, 0);
+	SET @tb_product_sold = fn_verify_storage(in_product, 2, 0);
+	SET @insert_qnt_storage = fn_verify_storage(in_product, 3, 0);
+    
+    CASE
+		WHEN (in_quantity > @insert_qnt_storage) OR (in_quantity <= 0) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid quantity of product to be sold.';
+		WHEN (in_profit <= 0) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid profit.';
+		WHEN (in_date > DATE(NOW())) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid date.';
+		ELSE
+			INSERT INTO tb_sale
+            VALUES (DEFAULT, @insert_id_storage, in_quantity, in_profit, in_date);
+            
+			CALL sp_subtract_product(@tb_product_sold, @insert_id_storage, @insert_qnt_storage, in_quantity);
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_scrap(in_product VARCHAR(50), in_quantity INTEGER, in_date DATE)
+BEGIN
+	SET @insert_id_storage = fn_verify_storage(in_product, 1, 0);
+	SET @tb_product_scraped = fn_verify_storage(in_product, 2, 0);
+	SET @insert_qnt_storage = fn_verify_storage(in_product, 3, 0);
+    
+	IF (@tb_product_scraped = 'pet') THEN
+		SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'You can not scrap a pet.';
+	END IF;
+    
+    CASE
+		WHEN (in_quantity > @insert_qnt_storage) OR (in_quantity <= 0) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid quantity of product to be scraped.';
+		WHEN (in_date > DATE(NOW())) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid date.';
+		ELSE        
+			INSERT INTO tb_scrap
+            VALUES (DEFAULT, @insert_id_storage, in_quantity, in_date);
+            
+			CALL sp_subtract_product(@tb_product_scraped, @insert_id_storage, @insert_qnt_storage, in_quantity);
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_storage_exploration(in_exploration INTEGER, in_product VARCHAR(50), in_quantity INTEGER)
+BEGIN
+	SET @insert_id_storage = fn_verify_storage(in_product, 1, 1);
+	SET @tb_product_exploration = fn_verify_storage(in_product, 2, 1);
+    SET @insert_qnt_storage = fn_verify_storage(in_product, 3, 1);
+
+	CASE
+		WHEN ((SELECT id_exploration FROM tb_exploration WHERE id_exploration = in_exploration) IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Exploration not found.';
+		WHEN (@tb_product_exploration = 'pet') THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'You can not find a pet on explorations.';
+		WHEN (in_quantity <= 0) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid quantity of product found.';
+		ELSE
+            INSERT INTO tb_storage_exploration
+            VALUES (in_exploration, @insert_id_storage, in_quantity);
+            
+			CALL sp_add_product(@tb_product_exploration, @insert_id_storage, @insert_qnt_storage, in_quantity);
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_diary(in_money INTEGER, in_energy INTEGER, in_water INTEGER, in_food INTEGER)
+BEGIN
+    CASE
+		WHEN (in_money < 0) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid amount of money.';
+		WHEN (in_energy NOT BETWEEN 0 AND 100) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid energy percentage.';
+		WHEN (in_water NOT BETWEEN 0 AND 100) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid water percentage.';
+		WHEN (in_food NOT BETWEEN 0 AND 100) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid food percentage.';
+		ELSE
+        	SET @insert_count_dweller = (SELECT COUNT(*) FROM tb_dweller);
+			SET @insert_count_decease = (SELECT COUNT(*) FROM tb_decease);
+			SET @insert_count_room = (SELECT COUNT(*) FROM tb_room);
+			SET @insert_count_exploration = (SELECT COUNT(*) FROM tb_exploration);
+			SET @insert_count_quest = (SELECT COUNT(*) FROM tb_quest);
+			SET @insert_count_incident = (SELECT COUNT(*) FROM tb_incident);
+			SET @insert_count_outfit = (SELECT SUM(quantity) FROM tb_outfit);
+			SET @insert_count_weapon = (SELECT SUM(quantity) FROM tb_weapon);
+			SET @insert_count_pet = (SELECT SUM(quantity) FROM tb_pet);
+			SET @insert_count_junk = (SELECT SUM(quantity) FROM tb_junk);
+			SET @insert_count_sale = (SELECT COUNT(*) FROM tb_sale);
+			SET @insert_count_scrap = (SELECT COUNT(*) FROM tb_scrap);
+            
+            INSERT INTO tb_diary
+            VALUES (DEFAULT,
+					DATE(NOW()),
+					@insert_count_dweller,
+					@insert_count_decease,
+                    in_money,
+					@insert_count_room,
+					@insert_count_exploration,
+					@insert_count_quest,
+					@insert_count_incident,
+					@insert_count_outfit,
+					@insert_count_weapon,
+					@insert_count_pet,
+					@insert_count_junk,
+					@insert_count_sale,
+					@insert_count_scrap,
+                    in_energy,
+                    in_water,
+                    in_food);
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_storage_quest(in_quest INTEGER, in_product VARCHAR(50), in_quantity INTEGER)
+BEGIN
+	SET @insert_id_storage = fn_verify_storage(in_product, 1, 1);
+	SET @tb_product_quest = fn_verify_storage(in_product, 2, 1);
+    SET @insert_qnt_storage = fn_verify_storage(in_product, 3, 1);
+
+	CASE
+		WHEN ((SELECT id_quest FROM tb_quest WHERE id_quest = in_quest) IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Quest not found.';
+		WHEN (@tb_product_quest = 'pet') THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'You can not find a pet on quests.';
+		WHEN (in_quantity <= 0) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid quantity of product found.';
+		ELSE
+            INSERT INTO tb_storage_quest
+            VALUES (in_quest, @insert_id_storage, in_quantity);
+            
+			CALL sp_add_product(@tb_product_quest, @insert_id_storage, @insert_qnt_storage, in_quantity);
+    END CASE;
+END //
+DELIMITER ;
+
+
+
+DELIMITER //
+CREATE PROCEDURE sp_insert_storage_scrap(in_scrap INTEGER, in_product VARCHAR(50), in_quantity INTEGER)
+BEGIN
+    SET @insert_id_storage = fn_verify_storage(in_product, 1, 1);
+    SET @tb_product_scrap = fn_verify_storage(in_product, 2, 1);
+    SET @insert_qnt_storage = fn_verify_storage(in_product, 3, 1);
+
+	CASE
+		WHEN ((SELECT id_scrap FROM tb_scrap WHERE id_scrap = in_scrap) IS NULL) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Scrap not found.';
+		WHEN (@tb_product_scrap <> 'junk') THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'You can only get junk from scrap.';
+		WHEN (in_quantity <= 0) THEN
+			SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid quantity of product scraped.';
+		ELSE
+            INSERT INTO tb_storage_scrap
+            VALUES (in_scrap, @insert_id_storage, in_quantity);
+            
+			CALL sp_add_product(@tb_product_scrap, @insert_id_storage, @insert_qnt_storage, in_quantity);
+    END CASE;
+END //
+DELIMITER ;
